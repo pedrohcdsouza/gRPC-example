@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Produtos</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <h1>🚀 gRPC Microservices</h1>
+            <ul class="nav-links">
+                <li><a href="/">Home</a></li>
+                <li><a href="/users">Usuários</a></li>
+                <li><a href="/products" class="active">Produtos</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2>📦 Gerenciamento de Produtos</h2>
+        <p class="subtitle">Product Service (Node.js - porta 50052)</p>
+
+        <% if (error) { %>
+            <div class="alert alert-error">
+                ❌ Erro: <%= error %>
+            </div>
+        <% } %>
+
+        <!-- Formulário de Criação -->
+        <div class="form-container">
+            <h3>Criar Novo Produto</h3>
+            <form id="createProductForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Nome:</label>
+                        <input type="text" id="name" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="price">Preço (R$):</label>
+                        <input type="number" id="price" name="price" step="0.01" min="0" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="stock">Estoque:</label>
+                        <input type="number" id="stock" name="stock" min="0" required>
+                    </div>
+                    <div class="form-group flex-2">
+                        <label for="description">Descrição:</label>
+                        <input type="text" id="description" name="description">
+                    </div>
+                </div>
+                <button type="submit" class="btn">Criar Produto</button>
+            </form>
+        </div>
+
+        <!-- Lista de Produtos -->
+        <div class="table-container">
+            <h3>Lista de Produtos</h3>
+            <% if (products.length === 0) { %>
+                <p class="empty-message">Nenhum produto cadastrado ainda.</p>
+            <% } else { %>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nome</th>
+                            <th>Descrição</th>
+                            <th>Preço</th>
+                            <th>Estoque</th>
+                            <th>Data de Criação</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% products.forEach(product => { %>
+                            <tr data-id="<%= product.id %>">
+                                <td><code><%= product.id.substring(0, 8) %>...</code></td>
+                                <td class="product-name"><%= product.name %></td>
+                                <td class="product-description"><%= product.description || '-' %></td>
+                                <td class="product-price">R$ <%= parseFloat(product.price).toFixed(2) %></td>
+                                <td class="product-stock"><%= product.stock %> un</td>
+                                <td><%= new Date(parseInt(product.created_at)).toLocaleString('pt-BR') %></td>
+                                <td class="actions">
+                                    <button onclick="editProduct('<%= product.id %>', '<%= product.name %>', '<%= product.description %>', <%= product.price %>, <%= product.stock %>)" class="btn-small btn-edit">Editar</button>
+                                    <button onclick="deleteProduct('<%= product.id %>')" class="btn-small btn-delete">Deletar</button>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+                <p class="total-count">Total: <%= products.length %> produtos</p>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Modal de Edição -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Editar Produto</h3>
+            <form id="editProductForm">
+                <input type="hidden" id="editProductId">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editName">Nome:</label>
+                        <input type="text" id="editName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editPrice">Preço (R$):</label>
+                        <input type="number" id="editPrice" step="0.01" min="0" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editStock">Estoque:</label>
+                        <input type="number" id="editStock" min="0" required>
+                    </div>
+                    <div class="form-group flex-2">
+                        <label for="editDescription">Descrição:</label>
+                        <input type="text" id="editDescription">
+                    </div>
+                </div>
+                <button type="submit" class="btn">Salvar Alterações</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/products.js"></script>
+</body>
+</html>

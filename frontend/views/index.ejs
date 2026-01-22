@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>gRPC Microservices</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="container">
+        <h1>🚀 gRPC Microservices</h1>
+        <ul class="nav-links">
+          <li><a href="/" class="active">Home</a></li>
+          <li><a href="/users">Usuários</a></li>
+          <li><a href="/products">Produtos</a></li>
+        </ul>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="hero">
+        <h2>Bem-vindo ao Sistema de Microserviços gRPC</h2>
+        <p>
+          Este é um exemplo de arquitetura de microserviços usando gRPC com
+          Python e Node.js
+        </p>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="card-icon">👥</div>
+          <h3>User Service</h3>
+          <p>Microserviço Python para gerenciar usuários</p>
+          <ul class="feature-list">
+            <li>✅ Criar usuários</li>
+            <li>✅ Listar usuários</li>
+            <li>✅ Atualizar usuários</li>
+            <li>✅ Deletar usuários</li>
+          </ul>
+          <a href="/users" class="btn">Gerenciar Usuários</a>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">📦</div>
+          <h3>Product Service</h3>
+          <p>Microserviço Node.js para gerenciar produtos</p>
+          <ul class="feature-list">
+            <li>✅ Criar produtos</li>
+            <li>✅ Listar produtos</li>
+            <li>✅ Atualizar produtos</li>
+            <li>✅ Deletar produtos</li>
+          </ul>
+          <a href="/products" class="btn">Gerenciar Produtos</a>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">⚡</div>
+          <h3>gRPC Protocol</h3>
+          <p>Comunicação de alta performance entre serviços</p>
+          <ul class="feature-list">
+            <li>✅ Protocol Buffers</li>
+            <li>✅ Tipagem forte</li>
+            <li>✅ Baixa latência</li>
+            <li>✅ Comunicação bidirecional</li>
+          </ul>
+          <a href="https://grpc.io/" target="_blank" class="btn btn-secondary"
+            >Documentação</a
+          >
+        </div>
+      </div>
+
+      <div class="architecture">
+        <h2>📐 Arquitetura do Sistema</h2>
+        <div class="architecture-diagram">
+          <div class="arch-item">
+            <div class="arch-box frontend-box">
+              <strong>Frontend</strong>
+              <small>Node.js + Express</small>
+            </div>
+          </div>
+          <div class="arch-arrows">⬇️ gRPC ⬇️</div>
+          <div class="arch-services">
+            <div class="arch-box service-box">
+              <strong>User Service</strong>
+              <small>Python</small>
+              <small>Port: 50051</small>
+            </div>
+            <div class="arch-box service-box">
+              <strong>Product Service</strong>
+              <small>Node.js</small>
+              <small>Port: 50052</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h2>🛠️ Tecnologias Utilizadas</h2>
+        <div class="tech-grid">
+          <div class="tech-item">
+            <strong>gRPC</strong>
+            <p>Framework RPC de alta performance</p>
+          </div>
+          <div class="tech-item">
+            <strong>Protocol Buffers</strong>
+            <p>Serialização eficiente de dados</p>
+          </div>
+          <div class="tech-item">
+            <strong>Python</strong>
+            <p>User Service backend</p>
+          </div>
+          <div class="tech-item">
+            <strong>Node.js</strong>
+            <p>Product Service e Frontend</p>
+          </div>
+          <div class="tech-item">
+            <strong>Docker</strong>
+            <p>Containerização dos serviços</p>
+          </div>
+          <div class="tech-item">
+            <strong>Docker Compose</strong>
+            <p>Orquestração de containers</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div class="container">
+        <p>
+          © 2026 gRPC Microservices Example | Desenvolvido para fins
+          educacionais
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

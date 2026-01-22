@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Usuários</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <h1>🚀 gRPC Microservices</h1>
+            <ul class="nav-links">
+                <li><a href="/">Home</a></li>
+                <li><a href="/users" class="active">Usuários</a></li>
+                <li><a href="/products">Produtos</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2>👥 Gerenciamento de Usuários</h2>
+        <p class="subtitle">User Service (Python - porta 50051)</p>
+
+        <% if (error) { %>
+            <div class="alert alert-error">
+                ❌ Erro: <%= error %>
+            </div>
+        <% } %>
+
+        <!-- Formulário de Criação -->
+        <div class="form-container">
+            <h3>Criar Novo Usuário</h3>
+            <form id="createUserForm">
+                <div class="form-group">
+                    <label for="name">Nome:</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <button type="submit" class="btn">Criar Usuário</button>
+            </form>
+        </div>
+
+        <!-- Lista de Usuários -->
+        <div class="table-container">
+            <h3>Lista de Usuários</h3>
+            <% if (users.length === 0) { %>
+                <p class="empty-message">Nenhum usuário cadastrado ainda.</p>
+            <% } else { %>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nome</th>
+                            <th>Email</th>
+                            <th>Data de Criação</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% users.forEach(user => { %>
+                            <tr data-id="<%= user.id %>">
+                                <td><code><%= user.id.substring(0, 8) %>...</code></td>
+                                <td class="user-name"><%= user.name %></td>
+                                <td class="user-email"><%= user.email %></td>
+                                <td><%= new Date(parseInt(user.created_at) * 1000).toLocaleString('pt-BR') %></td>
+                                <td class="actions">
+                                    <button onclick="editUser('<%= user.id %>', '<%= user.name %>', '<%= user.email %>')" class="btn-small btn-edit">Editar</button>
+                                    <button onclick="deleteUser('<%= user.id %>')" class="btn-small btn-delete">Deletar</button>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+                <p class="total-count">Total: <%= users.length %> usuários</p>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Modal de Edição -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Editar Usuário</h3>
+            <form id="editUserForm">
+                <input type="hidden" id="editUserId">
+                <div class="form-group">
+                    <label for="editName">Nome:</label>
+                    <input type="text" id="editName" required>
+                </div>
+                <div class="form-group">
+                    <label for="editEmail">Email:</label>
+                    <input type="email" id="editEmail" required>
+                </div>
+                <button type="submit" class="btn">Salvar Alterações</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/users.js"></script>
+</body>
+</html>
