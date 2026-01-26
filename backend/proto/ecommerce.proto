@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package ecommerce;
+
+service InventoryService {
+  rpc ReserveStock (OrderRequest) returns (InventoryResponse);
+  rpc ReleaseStock (OrderRequest) returns (Empty);
+}
+
+service PaymentService {
+  rpc ProcessPayment (PaymentRequest) returns (PaymentResponse);
+}
+
+service ShippingService {
+  rpc CreateShipment (ShippingRequest) returns (ShippingResponse);
+}
+
+service OrderService {
+  rpc CancelOrder (CancelOrderRequest) returns (OrderResponse);
+  rpc CompleteOrder (OrderRequest) returns (OrderResponse);
+}
+
+message CancelOrderRequest {
+  int32 orderId = 1;
+  string reason = 2;
+}
+
+message OrderResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message Empty {}
+
+message OrderItem {
+  int32 productId = 1;
+  int32 quantity = 2;
+}
+
+message OrderRequest {
+  int32 orderId = 1;
+  int32 customerId = 2;
+  repeated OrderItem items = 3;
+}
+
+message InventoryResponse {
+  int32 orderId = 1;
+  double total = 2;
+  bool success = 3;
+  string message = 4;
+}
+
+message PaymentRequest {
+  int32 orderId = 1;
+  double amount = 2;
+}
+
+message PaymentResponse {
+  int32 orderId = 1;
+  int32 paymentId = 2;
+  bool success = 3;
+  string message = 4;
+}
+
+message ShippingRequest {
+  int32 orderId = 1;
+}
+
+message ShippingResponse {
+  int32 orderId = 1;
+  int32 shipmentId = 2;
+  string trackingCode = 3;
+  bool success = 4;
+}

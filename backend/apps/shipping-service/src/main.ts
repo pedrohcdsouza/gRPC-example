@@ -3,26 +3,23 @@ import { ShippingServiceModule } from './shipping-service.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { Logger } from '@nestjs/common';
 
+import { join } from 'path';
+
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     ShippingServiceModule,
     {
-      transport: Transport.RMQ,
+      transport: Transport.GRPC,
       options: {
-        urls: ['amqp://admin:admin@rabbitmq:5672'],
-        exchange: 'ecommerce.exchange',
-        exchangeType: 'topic',
-        queue: 'shipping-queue',
-        routingKey: 'payment.approved',
-        queueOptions: {
-          durable: false,
-        },
+        package: 'ecommerce',
+        protoPath: join(process.cwd(), 'proto/ecommerce.proto'),
+        url: '0.0.0.0:3004',
       },
     },
   );
 
   await app.listen();
   const logger = new Logger('ShippingBootstrap');
-  logger.log('Shipping Service is listening on RabbitMQ...');
+  logger.log('Shipping Service is listening on gRPC port 3004...');
 }
 bootstrap();

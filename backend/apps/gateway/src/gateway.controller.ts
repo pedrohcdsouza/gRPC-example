@@ -1,31 +1,47 @@
-import { Body, Controller, Get, Post, Param, Logger, Sse, MessageEvent } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Param,
+  Logger,
+  Sse,
+  MessageEvent,
+  Inject,
+  OnModuleInit,
+} from '@nestjs/common';
 import { GatewayService } from './gateway.service';
 import { SseService } from './sse.service';
-import { RabbitMQPublisher } from '../../common/rabbitmq.service';
-import { EventPattern, Payload } from '@nestjs/microservices';
+import type { ClientGrpc } from '@nestjs/microservices';
 import {
   CreateOrderDto,
   OrderResponseDto,
   ProductDto,
 } from './dto/gateway.dto';
-import {
-  OrderCreatedEvent,
-  InventoryReservedEvent,
-  InventoryInsufficientEvent,
-  PaymentFailedEvent,
-  ShippingDeliveredEvent,
-  PaymentApprovedEvent,
-  ShippingCreatedEvent,
-  OrderStatus,
-  OrderStatusMessages,
-} from '../../common/dto/events.dto';
-import { Observable, map } from 'rxjs';
+import { OrderStatus, OrderStatusMessages } from '../../common/dto/events.dto';
+import { Observable, map, firstValueFrom } from 'rxjs';
+
+interface InventoryService {
+  reserveStock(data: any): Observable<any>;
+}
+
+interface PaymentService {
+  processPayment(data: any): Observable<any>;
+}
+
+interface ShippingService {
+  createShipment(data: any): Observable<any>;
+}
 
 @Controller()
-export class GatewayController {
+export class GatewayController implements OnModuleInit {
   private readonly logger = new Logger(GatewayController.name);
   private orders: Map<number, OrderResponseDto> = new Map();
   private orderIdCounter = 1;
+
+  private inventoryService: InventoryService;
+  private paymentService: PaymentService;
+  private shippingService: ShippingService;
 
   // Produtos disponíveis (sincronizado com Inventory Service)
   private products: ProductDto[] = [
@@ -37,8 +53,19 @@ export class GatewayController {
   constructor(
     private readonly gatewayService: GatewayService,
     private readonly sseService: SseService,
-    private readonly rabbitMQPublisher: RabbitMQPublisher,
+    @Inject('INVENTORY_PACKAGE') private inventoryClient: ClientGrpc,
+    @Inject('PAYMENT_PACKAGE') private paymentClient: ClientGrpc,
+    @Inject('SHIPPING_PACKAGE') private shippingClient: ClientGrpc,
   ) {}
+
+  onModuleInit() {
+    this.inventoryService =
+      this.inventoryClient.getService<InventoryService>('InventoryService');
+    this.paymentService =
+      this.paymentClient.getService<PaymentService>('PaymentService');
+    this.shippingService =
+      this.shippingClient.getService<ShippingService>('ShippingService');
+  }
 
   @Get()
   getHello(): string {
@@ -50,9 +77,12 @@ export class GatewayController {
   orderEvents(): Observable<MessageEvent> {
     this.logger.log('Client connected to SSE stream');
     return this.sseService.getOrderUpdates().pipe(
-      map((event) => ({
-        data: JSON.stringify(event),
-      } as MessageEvent)),
+      map(
+        (event) =>
+          ({
+            data: JSON.stringify(event),
+          }) as MessageEvent,
+      ),
     );
   }
 
@@ -82,13 +112,17 @@ export class GatewayController {
   }
 
   @Post('orders')
-  async createOrder(@Body() createOrderDto: CreateOrderDto): Promise<OrderResponseDto> {
-    this.logger.log(`Creating new order for customer ${createOrderDto.customerId}`);
+  async createOrder(
+    @Body() createOrderDto: CreateOrderDto,
+  ): Promise<OrderResponseDto> {
+    this.logger.log(
+      `Creating new order for customer ${createOrderDto.customerId}`,
+    );
 
     // Calcular total estimado
     let estimatedTotal = 0;
     for (const item of createOrderDto.items) {
-      const product = this.products.find(p => p.id === item.productId);
+      const product = this.products.find((p) => p.id === item.productId);
       if (product) {
         estimatedTotal += product.price * item.quantity;
       }
@@ -105,236 +139,99 @@ export class GatewayController {
 
     this.orders.set(orderId, order);
 
-    // Emitir evento SSE para novo pedido
-    this.sseService.emitOrderUpdate({
-      orderId,
-      status: OrderStatus.PENDING,
-      message: OrderStatusMessages[OrderStatus.PENDING],
-      timestamp: new Date(),
-      service: 'gateway',
-    });
+    // 1. PENDING
+    this.emitUpdate(orderId, OrderStatus.PENDING, 'gateway');
 
-    // Publicar evento de pedido criado
-    const event: OrderCreatedEvent = {
-      orderId,
-      customerId: createOrderDto.customerId,
-      items: createOrderDto.items,
-    };
-
-    // Publish to inventory so it can reserve stock
     try {
-      await this.rabbitMQPublisher.publish('order.created', event);
-      this.logger.log(`Order created and event published to inventory: ${orderId}`);
+      // 2. Reserve Stock (Inventory)
+      this.logger.log(`Calling Inventory Service for order ${orderId}`);
+      const inventoryResponse = await firstValueFrom(
+        this.inventoryService.reserveStock({
+          orderId,
+          customerId: createOrderDto.customerId,
+          items: createOrderDto.items,
+        }),
+      );
 
-      // Atualizar status para IN_INVENTORY
-      order.status = OrderStatus.IN_INVENTORY;
-      this.orders.set(orderId, order);
+      if (!inventoryResponse.success) {
+        throw new Error(inventoryResponse.message || 'Failed to reserve stock');
+      }
 
-      this.sseService.emitOrderUpdate({
+      order.status = OrderStatus.INVENTORY_CONFIRMED;
+      order.total = inventoryResponse.total;
+      this.emitUpdate(
         orderId,
-        status: OrderStatus.IN_INVENTORY,
-        message: OrderStatusMessages[OrderStatus.IN_INVENTORY],
-        timestamp: new Date(),
-        service: 'inventory-service',
-      });
+        OrderStatus.INVENTORY_CONFIRMED,
+        'inventory-service',
+      );
+
+      // 3. Process Payment
+      this.logger.log(`Calling Payment Service for order ${orderId}`);
+      const paymentResponse = await firstValueFrom(
+        this.paymentService.processPayment({
+          orderId,
+          amount: order.total,
+        }),
+      );
+
+      if (!paymentResponse.success) {
+        throw new Error(paymentResponse.message || 'Payment failed');
+      }
+
+      order.status = OrderStatus.PAYMENT_CONFIRMED;
+      this.emitUpdate(
+        orderId,
+        OrderStatus.PAYMENT_CONFIRMED,
+        'payment-service',
+      );
+
+      // 4. Create Shipment
+      this.logger.log(`Calling Shipping Service for order ${orderId}`);
+      const shippingResponse = await firstValueFrom(
+        this.shippingService.createShipment({
+          orderId,
+        }),
+      );
+
+      if (!shippingResponse.success) {
+        throw new Error(shippingResponse.message || 'Shipping failed');
+      }
+
+      order.status = OrderStatus.SHIPPED;
+      this.emitUpdate(
+        orderId,
+        OrderStatus.SHIPPED,
+        'shipping-service',
+        `Rastreio: ${shippingResponse.trackingCode}`,
+      );
+
+      // Final status
+      order.status = OrderStatus.COMPLETED;
+      this.emitUpdate(orderId, OrderStatus.COMPLETED, 'shipping-service');
     } catch (error) {
-      this.logger.error('Failed to publish order.created event', error as any);
+      this.logger.error(`Order flow failed for ${orderId}: ${error.message}`);
+      order.status = OrderStatus.CANCELLED;
+      this.emitUpdate(orderId, OrderStatus.CANCELLED, 'gateway', error.message);
     }
 
     return order;
   }
 
-  // Event Handlers para atualizar estado local e emitir SSE
+  private emitUpdate(
+    orderId: number,
+    status: OrderStatus,
+    service: string,
+    extraMessage?: string,
+  ) {
+    let message = OrderStatusMessages[status];
+    if (extraMessage) message += ` - ${extraMessage}`;
 
-  @EventPattern('inventory.reserved')
-  handleInventoryReserved(@Payload() data: InventoryReservedEvent) {
-    try {
-      this.logger.log(`Inventory reserved for order: ${data.orderId}`);
-
-      const order = this.orders.get(data.orderId);
-      if (order) {
-        order.status = OrderStatus.IN_PAYMENT;
-        order.total = data.total;
-        this.orders.set(data.orderId, order);
-
-        this.sseService.emitOrderUpdate({
-          orderId: data.orderId,
-          status: OrderStatus.INVENTORY_CONFIRMED,
-          message: OrderStatusMessages[OrderStatus.INVENTORY_CONFIRMED],
-          timestamp: new Date(),
-          service: 'inventory-service',
-        });
-
-        // Logo após, atualizar para IN_PAYMENT
-        setTimeout(() => {
-          this.sseService.emitOrderUpdate({
-            orderId: data.orderId,
-            status: OrderStatus.IN_PAYMENT,
-            message: OrderStatusMessages[OrderStatus.IN_PAYMENT],
-            timestamp: new Date(),
-            service: 'payment-service',
-          });
-        }, 500);
-      }
-
-      // Atualizar estoque local
-      for (const item of data.items) {
-        const product = this.products.find(p => p.id === item.productId);
-        if (product) {
-          product.stock -= item.quantity;
-        }
-      }
-    } catch (error) {
-      this.logger.error('Error handling inventory.reserved', error as any);
-    }
-  }
-
-  @EventPattern('inventory.insufficient')
-  handleInventoryInsufficient(@Payload() data: InventoryInsufficientEvent) {
-    try {
-      this.logger.warn(`Insufficient inventory for order: ${data.orderId}`);
-      const order = this.orders.get(data.orderId);
-      if (order) {
-        order.status = OrderStatus.CANCELLED;
-        this.orders.set(data.orderId, order);
-
-        this.sseService.emitOrderUpdate({
-          orderId: data.orderId,
-          status: OrderStatus.CANCELLED,
-          message: 'Estoque insuficiente - ' + OrderStatusMessages[OrderStatus.CANCELLED],
-          timestamp: new Date(),
-          service: 'inventory-service',
-        });
-      }
-    } catch (error) {
-      this.logger.error('Error handling inventory.insufficient', error as any);
-    }
-  }
-
-  @EventPattern('payment.approved')
-  handlePaymentApproved(@Payload() data: PaymentApprovedEvent) {
-    try {
-      this.logger.log(`Payment approved for order: ${data.orderId}`);
-      const order = this.orders.get(data.orderId);
-      if (order) {
-        order.status = OrderStatus.IN_SHIPPING;
-        this.orders.set(data.orderId, order);
-
-        this.sseService.emitOrderUpdate({
-          orderId: data.orderId,
-          status: OrderStatus.PAYMENT_CONFIRMED,
-          message: OrderStatusMessages[OrderStatus.PAYMENT_CONFIRMED],
-          timestamp: new Date(),
-          service: 'payment-service',
-        });
-
-        setTimeout(() => {
-          this.sseService.emitOrderUpdate({
-            orderId: data.orderId,
-            status: OrderStatus.IN_SHIPPING,
-            message: OrderStatusMessages[OrderStatus.IN_SHIPPING],
-            timestamp: new Date(),
-            service: 'shipping-service',
-          });
-        }, 500);
-      }
-    } catch (error) {
-      this.logger.error('Error handling payment.approved', error as any);
-    }
-  }
-
-  @EventPattern('payment.failed')
-  handlePaymentFailed(@Payload() data: PaymentFailedEvent) {
-    try {
-      this.logger.warn(`Payment failed for order: ${data.orderId}. Reason: ${data.reason ?? 'unknown'}`);
-      const order = this.orders.get(data.orderId);
-      if (order) {
-        order.status = OrderStatus.CANCELLED;
-        this.orders.set(data.orderId, order);
-
-        this.sseService.emitOrderUpdate({
-          orderId: data.orderId,
-          status: OrderStatus.CANCELLED,
-          message: 'Pagamento falhou - ' + OrderStatusMessages[OrderStatus.CANCELLED],
-          timestamp: new Date(),
-          service: 'payment-service',
-        });
-      }
-    } catch (error) {
-      this.logger.error('Error handling payment.failed', error as any);
-    }
-  }
-
-  @EventPattern('order.cancelled')
-  handleOrderCancelled(@Payload() data: any) {
-    try {
-      this.logger.log(`Order cancelled: ${data.orderId}`);
-      const order = this.orders.get(data.orderId);
-      if (order) {
-        order.status = OrderStatus.CANCELLED;
-        this.orders.set(data.orderId, order);
-        // Devolver estoque
-        for (const item of data.items) {
-          const product = this.products.find(p => p.id === item.productId);
-          if (product) {
-            product.stock += item.quantity;
-          }
-        }
-
-        this.sseService.emitOrderUpdate({
-          orderId: data.orderId,
-          status: OrderStatus.CANCELLED,
-          message: OrderStatusMessages[OrderStatus.CANCELLED],
-          timestamp: new Date(),
-          service: 'order-service',
-        });
-      }
-    } catch (error) {
-      this.logger.error('Error handling order.cancelled', error as any);
-    }
-  }
-
-  @EventPattern('shipping.created')
-  handleShippingCreated(@Payload() data: ShippingCreatedEvent) {
-    try {
-      this.logger.log(`Shipping created for order: ${data.orderId}`);
-      const order = this.orders.get(data.orderId);
-      if (order) {
-        order.status = OrderStatus.SHIPPED;
-        this.orders.set(data.orderId, order);
-
-        this.sseService.emitOrderUpdate({
-          orderId: data.orderId,
-          status: OrderStatus.SHIPPED,
-          message: `${OrderStatusMessages[OrderStatus.SHIPPED]} - Rastreio: ${data.trackingCode}`,
-          timestamp: new Date(),
-          service: 'shipping-service',
-        });
-      }
-    } catch (error) {
-      this.logger.error('Error handling shipping.created', error as any);
-    }
-  }
-
-  @EventPattern('shipping.delivered')
-  handleShippingDelivered(@Payload() data: ShippingDeliveredEvent) {
-    try {
-      this.logger.log(`Order delivered: ${data.orderId}`);
-      const order = this.orders.get(data.orderId);
-      if (order) {
-        order.status = OrderStatus.COMPLETED;
-        this.orders.set(data.orderId, order);
-
-        this.sseService.emitOrderUpdate({
-          orderId: data.orderId,
-          status: OrderStatus.COMPLETED,
-          message: OrderStatusMessages[OrderStatus.COMPLETED],
-          timestamp: new Date(),
-          service: 'shipping-service',
-        });
-      }
-    } catch (error) {
-      this.logger.error('Error handling shipping.delivered', error as any);
-    }
+    this.sseService.emitOrderUpdate({
+      orderId,
+      status,
+      message,
+      timestamp: new Date(),
+      service,
+    });
   }
 }

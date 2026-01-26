@@ -1,10 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RabbitMQPublisher } from '../../common/rabbitmq.service';
 import {
   OrderCreatedEvent,
   OrderCancelledEvent,
-  InventoryReservedEvent,
-  InventoryInsufficientEvent,
   ProductDto,
 } from '../../common/dto/events.dto';
 
@@ -17,20 +14,24 @@ export class InventoryServiceService {
     { id: 3, name: 'Teclado', price: 150, stock: 30 },
   ];
 
-  constructor(private readonly rabbitMQPublisher: RabbitMQPublisher) {}
+  constructor() {}
 
   getHello(): string {
     return 'Inventory Service is running!';
   }
 
-  async reserveStock(orderEvent: OrderCreatedEvent): Promise<void> {
+  async reserveStock(orderEvent: OrderCreatedEvent): Promise<any> {
     this.logger.log(`Checking stock for order: ${orderEvent.orderId}`);
 
-    const missingProducts: { productId: number; requested: number; available: number }[] = [];
+    const missingProducts: {
+      productId: number;
+      requested: number;
+      available: number;
+    }[] = [];
 
     // Verificar se há estoque suficiente
     for (const item of orderEvent.items) {
-      const product = this.products.find(p => p.id === item.productId);
+      const product = this.products.find((p) => p.id === item.productId);
 
       if (!product) {
         missingProducts.push({
@@ -47,51 +48,55 @@ export class InventoryServiceService {
       }
     }
 
-    // Se não houver estoque suficiente, publicar evento de estoque insuficiente
+    // Se não houver estoque suficiente, retornar erro
     if (missingProducts.length > 0) {
       this.logger.warn(`Insufficient stock for order: ${orderEvent.orderId}`);
-
-      const event: InventoryInsufficientEvent = {
+      return {
         orderId: orderEvent.orderId,
-        missingProducts,
+        success: false,
+        message: 'Insufficient stock',
+        total: 0,
       };
-
-      await this.rabbitMQPublisher.publish('inventory.insufficient', event);
-      return;
     }
 
     // Reservar estoque e calcular total
     let total = 0;
     for (const item of orderEvent.items) {
-      const product = this.products.find(p => p.id === item.productId);
+      const product = this.products.find((p) => p.id === item.productId);
       if (product) {
         product.stock -= item.quantity;
         total += product.price * item.quantity;
-        this.logger.log(`Reserved ${item.quantity} units of ${product.name}. Remaining stock: ${product.stock}`);
+        this.logger.log(
+          `Reserved ${item.quantity} units of ${product.name}. Remaining stock: ${product.stock}`,
+        );
       }
     }
 
-    this.logger.log(`Stock reserved for order: ${orderEvent.orderId} Total: ${total}`);
+    this.logger.log(
+      `Stock reserved for order: ${orderEvent.orderId} Total: ${total}`,
+    );
 
-    // Publicar evento de estoque reservado
-    const event: InventoryReservedEvent = {
+    return {
       orderId: orderEvent.orderId,
-      items: orderEvent.items,
       total,
+      success: true,
+      message: 'Stock reserved successfully',
     };
-
-    await this.rabbitMQPublisher.publish('inventory.reserved', event);
   }
 
   async releaseStock(orderEvent: OrderCancelledEvent): Promise<void> {
-    this.logger.log(`Releasing stock for cancelled order: ${orderEvent.orderId}`);
+    this.logger.log(
+      `Releasing stock for cancelled order: ${orderEvent.orderId}`,
+    );
 
     // Devolver o estoque
     for (const item of orderEvent.items) {
-      const product = this.products.find(p => p.id === item.productId);
+      const product = this.products.find((p) => p.id === item.productId);
       if (product) {
         product.stock += item.quantity;
-        this.logger.log(`Released ${item.quantity} units of ${product.name}. Current stock: ${product.stock}`);
+        this.logger.log(
+          `Released ${item.quantity} units of ${product.name}. Current stock: ${product.stock}`,
+        );
       }
     }
 

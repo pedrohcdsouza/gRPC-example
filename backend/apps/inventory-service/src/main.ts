@@ -3,26 +3,23 @@ import { InventoryServiceModule } from './inventory-service.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { Logger } from '@nestjs/common';
 
+import { join } from 'path';
+
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     InventoryServiceModule,
     {
-      transport: Transport.RMQ,
+      transport: Transport.GRPC,
       options: {
-        urls: ['amqp://admin:admin@rabbitmq:5672'],
-        exchange: 'ecommerce.exchange',
-        exchangeType: 'topic',
-        queue: 'inventory-queue',
-        routingKey: 'order.*',
-        queueOptions: {
-          durable: false,
-        },
+        package: 'ecommerce',
+        protoPath: join(process.cwd(), 'proto/ecommerce.proto'),
+        url: '0.0.0.0:3002',
       },
     },
   );
 
   await app.listen();
   const logger = new Logger('InventoryBootstrap');
-  logger.log('Inventory Service is listening on RabbitMQ...');
+  logger.log('Inventory Service is listening on gRPC port 3002...');
 }
 bootstrap();

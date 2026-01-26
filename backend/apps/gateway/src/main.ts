@@ -13,25 +13,8 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Conectar como microservice também para receber eventos
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
-      urls: ['amqp://admin:admin@rabbitmq:5672'],
-      exchange: 'ecommerce.exchange',
-      exchangeType: 'topic',
-      queue: 'gateway-queue',
-      routingKey: '#',
-      queueOptions: {
-        durable: false,
-      },
-    },
-  });
-
-  await app.startAllMicroservices();
   await app.listen(process.env.port ?? 3000);
   const logger = new Logger('GatewayBootstrap');
   logger.log('Gateway is running on http://localhost:3000');
-  logger.log('Gateway is also listening on RabbitMQ for events');
 }
 void bootstrap();

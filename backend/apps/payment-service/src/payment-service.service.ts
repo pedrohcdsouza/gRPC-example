@@ -1,10 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RabbitMQPublisher } from '../../common/rabbitmq.service';
-import {
-  InventoryReservedEvent,
-  PaymentApprovedEvent,
-  PaymentFailedEvent,
-} from '../../common/dto/events.dto';
 
 interface Payment {
   id: number;
@@ -19,13 +13,13 @@ export class PaymentServiceService {
   private payments: Payment[] = [];
   private paymentIdCounter = 1;
 
-  constructor(private readonly rabbitMQPublisher: RabbitMQPublisher) {}
+  constructor() {}
 
   getHello(): string {
     return 'Payment Service is running!';
   }
 
-  async processPayment(inventoryEvent: InventoryReservedEvent): Promise<void> {
+  async processPayment(inventoryEvent: any): Promise<any> {
     this.logger.log(`Processing payment for order: ${inventoryEvent.orderId}`);
 
     const paymentId = this.paymentIdCounter++;
@@ -39,38 +33,38 @@ export class PaymentServiceService {
       const payment: Payment = {
         id: paymentId,
         orderId: inventoryEvent.orderId,
-        amount: inventoryEvent.total,
+        amount: inventoryEvent.amount,
         status: 'FAILED',
       };
       this.payments.push(payment);
 
-      const event: PaymentFailedEvent = {
+      return {
         orderId: inventoryEvent.orderId,
         paymentId,
-        reason: 'Payment processing failed - Insufficient funds or card declined',
+        success: false,
+        message:
+          'Payment processing failed - Insufficient funds or card declined',
       };
-
-      await this.rabbitMQPublisher.publish('payment.failed', event);
-      return;
     }
 
     // Pagamento aprovado
-    this.logger.log(`Payment APPROVED for order: ${inventoryEvent.orderId} Amount: ${inventoryEvent.total}`);
+    this.logger.log(
+      `Payment APPROVED for order: ${inventoryEvent.orderId} Amount: ${inventoryEvent.amount}`,
+    );
 
     const payment: Payment = {
       id: paymentId,
       orderId: inventoryEvent.orderId,
-      amount: inventoryEvent.total,
+      amount: inventoryEvent.amount,
       status: 'APPROVED',
     };
     this.payments.push(payment);
 
-    const event: PaymentApprovedEvent = {
+    return {
       orderId: inventoryEvent.orderId,
       paymentId,
-      amount: inventoryEvent.total,
+      success: true,
+      message: 'Payment approved',
     };
-
-    await this.rabbitMQPublisher.publish('payment.approved', event);
   }
 }

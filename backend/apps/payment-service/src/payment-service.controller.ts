@@ -1,7 +1,6 @@
 import { Controller, Get, Logger } from '@nestjs/common';
 import { PaymentServiceService } from './payment-service.service';
-import { EventPattern, Payload } from '@nestjs/microservices';
-import { InventoryReservedEvent } from '../../common/dto/events.dto';
+import { GrpcMethod, Payload } from '@nestjs/microservices';
 
 @Controller()
 export class PaymentServiceController {
@@ -13,13 +12,14 @@ export class PaymentServiceController {
     return this.paymentServiceService.getHello();
   }
 
-  @EventPattern('inventory.reserved')
-  async handleInventoryReserved(@Payload() data: InventoryReservedEvent) {
+  @GrpcMethod('PaymentService', 'ProcessPayment')
+  async processPayment(@Payload() data: any) {
     try {
-  this.logger.log(`Received inventory.reserved event: ${data.orderId}`);
-      await this.paymentServiceService.processPayment(data);
+      this.logger.log(`Received ProcessPayment request: ${data.orderId}`);
+      return await this.paymentServiceService.processPayment(data);
     } catch (error) {
-  this.logger.error('Error processing inventory.reserved', error as any);
+      this.logger.error('Error processing ProcessPayment', error as any);
+      return { success: false, message: error.message };
     }
   }
 }

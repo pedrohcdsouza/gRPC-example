@@ -1,6 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RabbitMQPublisher } from '../../common/rabbitmq.service';
-import { OrderCancelledEvent } from '../../common/dto/events.dto';
 
 interface Order {
   id: number;
@@ -15,7 +13,7 @@ export class OrderServiceService {
   private readonly logger = new Logger(OrderServiceService.name);
   private orders: Map<number, Order> = new Map();
 
-  constructor(private readonly rabbitMQPublisher: RabbitMQPublisher) {}
+  constructor() {}
 
   getHello(): string {
     return 'Order Service is running!';
@@ -32,16 +30,7 @@ export class OrderServiceService {
 
     order.status = 'CANCELLED';
     this.orders.set(orderId, order);
-
-    // Publicar evento de pedido cancelado para liberar estoque
-    const event: OrderCancelledEvent = {
-      orderId,
-      reason,
-      items: order.items,
-    };
-
-    await this.rabbitMQPublisher.publish('order.cancelled', event);
-    this.logger.log(`Order ${orderId} cancelled and event published`);
+    this.logger.log(`Order ${orderId} cancelled`);
   }
 
   async completeOrder(orderId: number): Promise<void> {

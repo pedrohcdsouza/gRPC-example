@@ -9,6 +9,7 @@ COPY nest-cli.json ./
 RUN npm ci
 
 COPY apps ./apps
+COPY proto ./proto
 
 ARG APP_NAME
 ENV APP_NAME=${APP_NAME}
@@ -27,6 +28,7 @@ ENV APP_NAME=${APP_NAME}
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/proto ./proto
 
 EXPOSE 3000
 CMD node dist/apps/${APP_NAME}/main.js
