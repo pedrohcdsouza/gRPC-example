@@ -1,0 +1,105 @@
+import { Injectable, Logger } from '@nestjs/common';
+import {
+  OrderCreatedEvent,
+  OrderCancelledEvent,
+  ProductDto,
+} from '../../common/dto/events.dto';
+
+@Injectable()
+export class InventoryServiceService {
+  private readonly logger = new Logger(InventoryServiceService.name);
+  private products: ProductDto[] = [
+    { id: 1, name: 'Notebook', price: 2500, stock: 10 },
+    { id: 2, name: 'Mouse', price: 50, stock: 50 },
+    { id: 3, name: 'Teclado', price: 150, stock: 30 },
+  ];
+
+  constructor() {}
+
+  getHello(): string {
+    return 'Inventory Service is running!';
+  }
+
+  async reserveStock(orderEvent: OrderCreatedEvent): Promise<any> {
+    this.logger.log(`Checking stock for order: ${orderEvent.orderId}`);
+
+    const missingProducts: {
+      productId: number;
+      requested: number;
+      available: number;
+    }[] = [];
+
+    // Verificar se há estoque suficiente
+    for (const item of orderEvent.items) {
+      const product = this.products.find((p) => p.id === item.productId);
+
+      if (!product) {
+        missingProducts.push({
+          productId: item.productId,
+          requested: item.quantity,
+          available: 0,
+        });
+      } else if (product.stock < item.quantity) {
+        missingProducts.push({
+          productId: item.productId,
+          requested: item.quantity,
+          available: product.stock,
+        });
+      }
+    }
+
+    // Se não houver estoque suficiente, retornar erro
+    if (missingProducts.length > 0) {
+      this.logger.warn(`Insufficient stock for order: ${orderEvent.orderId}`);
+      return {
+        orderId: orderEvent.orderId,
+        success: false,
+        message: 'Insufficient stock',
+        total: 0,
+      };
+    }
+
+    // Reservar estoque e calcular total
+    let total = 0;
+    for (const item of orderEvent.items) {
+      const product = this.products.find((p) => p.id === item.productId);
+      if (product) {
+        product.stock -= item.quantity;
+        total += product.price * item.quantity;
+        this.logger.log(
+          `Reserved ${item.quantity} units of ${product.name}. Remaining stock: ${product.stock}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Stock reserved for order: ${orderEvent.orderId} Total: ${total}`,
+    );
+
+    return {
+      orderId: orderEvent.orderId,
+      total,
+      success: true,
+      message: 'Stock reserved successfully',
+    };
+  }
+
+  async releaseStock(orderEvent: OrderCancelledEvent): Promise<void> {
+    this.logger.log(
+      `Releasing stock for cancelled order: ${orderEvent.orderId}`,
+    );
+
+    // Devolver o estoque
+    for (const item of orderEvent.items) {
+      const product = this.products.find((p) => p.id === item.productId);
+      if (product) {
+        product.stock += item.quantity;
+        this.logger.log(
+          `Released ${item.quantity} units of ${product.name}. Current stock: ${product.stock}`,
+        );
+      }
+    }
+
+    this.logger.log(`Stock released for order: ${orderEvent.orderId}`);
+  }
+}
